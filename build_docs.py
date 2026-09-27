@@ -17,9 +17,6 @@ from warp._src.generated_files import generate_stubs_file
 
 logger = logging.getLogger(__name__)
 
-# Environment flag telling doctest workers that generated sources are ready.
-_DOCS_SOURCES_PREPARED_ENV = "WARP_DOCS_SOURCES_PREPARED"
-
 # Directories that do not contain standalone Sphinx documents to shard.
 _EXCLUDED_DOCS_DIRECTORIES = frozenset(("_build", "_src", "_templates", "superpowers"))
 
@@ -255,7 +252,6 @@ def run_parallel_doctests(
             )
 
             env = os.environ.copy()
-            env[_DOCS_SOURCES_PREPARED_ENV] = "1"
             env["WARP_CACHE_PATH"] = os.fspath(cache_path)
             command = [
                 sys.executable,
@@ -267,7 +263,11 @@ def run_parallel_doctests(
                     shard_output,
                     "doctest-shard",
                     warnings_as_errors,
-                    (f"warp_doctest_shard_manifest={manifest_path}",),
+                    (
+                        f"warp_doctest_shard_manifest={manifest_path}",
+                        "autosummary_generate=0",
+                        "doctest_show_successes=0",
+                    ),
                     jobs=1,
                 ),
             ]
@@ -326,18 +326,21 @@ def run_parallel_doctests(
 
         failed_shards.sort(key=lambda failure: failure[0].shard_index)
         for shard, _ in failed_shards:
-            details_path = shard.output_path if shard.output_path.exists() else shard.log_path
-            details = details_path.read_text(encoding="utf-8", errors="replace").rstrip()
-            if details_path == shard.log_path:
-                log_lines = details.splitlines()
-                if len(log_lines) > 80:
-                    omitted_count = len(log_lines) - 80
-                    details = f"... {omitted_count} earlier log lines omitted ...\n" + "\n".join(log_lines[-80:])
+            log_lines = shard.log_path.read_text(encoding="utf-8", errors="replace").rstrip().splitlines()
+            if len(log_lines) > 80:
+                omitted_count = len(log_lines) - 80
+                log_details = f"... {omitted_count} earlier log lines omitted ...\n" + "\n".join(log_lines[-80:])
+            else:
+                log_details = "\n".join(log_lines)
+
+            details = f"Worker log:\n{log_details}"
+            if shard.output_path.exists():
+                report = shard.output_path.read_text(encoding="utf-8", errors="replace").rstrip()
+                details = f"Doctest report:\n{report}\n\n{details}"
             logger.error(
-                "Doctest shard %d/%d details from %s (full log: %s; manifest: %s):\n%s",
+                "Doctest shard %d/%d details (full log: %s; manifest: %s):\n%s",
                 shard.shard_index + 1,
                 job_count,
-                details_path,
                 shard.log_path,
                 shard.manifest_path,
                 details,

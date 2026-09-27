@@ -3,10 +3,7 @@
 
 from pathlib import Path
 
-import sphinx.util.logging
 from sphinx.ext.doctest import DocTestBuilder
-
-logger = sphinx.util.logging.getLogger(__name__)
 
 
 class ShardedDocTestBuilder(DocTestBuilder):
@@ -22,7 +19,7 @@ class ShardedDocTestBuilder(DocTestBuilder):
         selected_docnames = set(manifest.read_text(encoding="utf-8").splitlines())
         unknown_docnames = selected_docnames - self.env.found_docs
         if unknown_docnames:
-            logger.warning("doctest shard contains unknown documents: %s", ", ".join(sorted(unknown_docnames)))
+            raise RuntimeError(f"Doctest shard contains unknown documents: {', '.join(sorted(unknown_docnames))}")
 
         super().write_documents(docnames & selected_docnames)
 
